@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>HeartAgent · 双模型协作智能体</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0d1017; --panel:#151a24; --panel2:#1b2130; --line:#262e40;
+    --txt:#dce3f2; --dim:#7d8aa3; --accent:#4f8cff; --green:#3ecf8e;
+    --red:#ff6b6b; --yellow:#f5c451; --purple:#b07cff; --cyan:#4fd8e0;
+    --orange:#f59f57; --pink:#ff7eb6;
+    --bubble-user-bg:#223252; --bubble-user-border:#31456e;
+    --tag-bg:#24304a; --tag-fg:#9db6e8;
+    --code-bg:#232b3d; --code-fg:#a8c0ee;
+    --pre-bg:#10141d; --pre-fg:#9fb0cc;
+    --ev-soft:rgba(255,255,255,.015); --ev-ts:#5a6579;
+    --chat-border:#3d4c6e; --stream-border:#3d6e5a; --result-border:#5a6579;
+    --heart-fg:#e8b9cd; --err-fg:#ffb3b3;
+    --chip-on-bg:#22304d; --dag-bg:#111520;
+    --green-border:#2c6e52; --scrollbar:#2a3348;
+    --quote-fg:#8b98b5; --quote-border:#31456e;
+  }
+  :root[data-theme="light"]{
+    color-scheme: light;
+    --bg:#f2f4f9; --panel:#ffffff; --panel2:#e9edf6; --line:#d7deeb;
+    --txt:#1e2633; --dim:#64708a; --accent:#2e6fe8; --green:#0f9d6a;
+    --red:#e05252; --yellow:#b07a10; --purple:#7a4fd8; --cyan:#0e97a5;
+    --orange:#d97a2a; --pink:#d84f8a;
+    --bubble-user-bg:#e3ecff; --bubble-user-border:#c6d8ff;
+    --tag-bg:#e3ebff; --tag-fg:#33559e;
+    --code-bg:#e4e9f4; --code-fg:#33559e;
+    --pre-bg:#f2f5fc; --pre-fg:#44506a;
+    --ev-soft:rgba(17,24,39,.03); --ev-ts:#98a2b8;
+    --chat-border:#b9c5dd; --stream-border:#a8cfbf; --result-border:#9aa6bd;
+    --heart-fg:#c2417f; --err-fg:#c23434;
+    --chip-on-bg:#dbe7ff; --dag-bg:#eef1f8;
+    --green-border:#9fd8c0; --scrollbar:#c3cbdd;
+    --quote-fg:#64708a; --quote-border:#c6d8ff;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{background:var(--bg); color:var(--txt); font:14px/1.55 "Segoe UI","Microsoft YaHei",sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden}
+  header{display:flex; align-items:center; gap:12px; padding:9px 16px; background:var(--panel); border-bottom:1px solid var(--line); flex:none; flex-wrap:wrap}
+  header h1{font-size:16px; font-weight:600}
+  header h1 em{color:var(--accent); font-style:normal}
+  .hd-status{margin-left:auto; display:flex; gap:14px; font-size:12.5px; color:var(--dim); align-items:center; flex-wrap:wrap}
+  .hd-status b{color:var(--txt); font-weight:600}
+  .dot{display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); margin-right:5px; animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  select.hsel{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:6px; padding:3px 6px; font-size:12.5px; outline:none}
+  main{flex:1; display:grid; grid-template-columns:minmax(440px,1.05fr) 1fr; min-height:0}
+  section{display:flex; flex-direction:column; min-height:0; min-width:0}
+  .left{border-right:1px solid var(--line)}
+  nav.tabs{display:flex; gap:4px; padding:8px 12px 0; background:var(--panel); flex:none}
+  nav.tabs button{background:none; border:none; color:var(--dim); padding:8px 12px; cursor:pointer; font-size:13.5px; border-bottom:2px solid transparent}
+  nav.tabs button.on{color:var(--txt); border-bottom-color:var(--accent)}
+  nav.tabs button .badge{background:var(--orange); color:#1a1305; border-radius:8px; padding:0 6px; font-size:11px; margin-left:4px; font-weight:700}
+  .tabsec{flex:1; display:flex; flex-direction:column; min-height:0; padding:12px 14px}
+  .tabsec[hidden]{display:none}
+
+  #chat{flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding-right:4px}
+  .msg{max-width:92%}
+  .msg .who{font-size:11.5px; color:var(--dim); margin-bottom:2px}
+  .msg .bubble{background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:8px 12px; word-break:break-word}
+  .msg.user{align-self:flex-end}
+  .msg.user .bubble{background:var(--bubble-user-bg); border-color:var(--bubble-user-border)}
+  .bubble.streaming::after{content:"▋"; color:var(--accent); animation:pulse 1s infinite}
+  .bubble.md h1,.bubble.md h2,.bubble.md h3{margin:6px 0 4px; font-size:1.05em}
+  .bubble.md p{margin:4px 0}
+  .bubble.md ul,.bubble.md ol{margin:4px 0 4px 20px}
+  .bubble.md code{background:var(--code-bg); padding:1px 6px; border-radius:5px; font-size:12px; color:var(--code-fg); font-family:Consolas,monospace}
+  .bubble.md pre{background:var(--pre-bg); border:1px solid var(--line); border-radius:7px; padding:8px 10px; overflow:auto; margin:6px 0}
+  .bubble.md pre code{background:none; padding:0; color:var(--pre-fg)}
+  .bubble.md a{color:var(--accent)}
+  #chat-form{display:flex; gap:8px; padding-top:10px; flex:none}
+  #chat-input{flex:1; background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:9px 12px; outline:none}
+  #chat-input:focus{border-color:var(--accent)}
+  button.primary{background:var(--accent); color:#fff; border:none; border-radius:8px; padding:9px 18px; cursor:pointer; font-size:13.5px}
+  button.primary:disabled{opacity:.45; cursor:default}
+  button.primary.stop{background:var(--red)}
+  button.ghost{background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:7px 12px; cursor:pointer; font-size:13px}
+  button.ghost:hover{border-color:var(--accent)}
+  button.mini{background:none; border:1px solid var(--line); color:var(--dim); border-radius:6px; padding:2px 8px; cursor:pointer; font-size:12px}
+  button.mini:hover{color:var(--txt); border-color:var(--accent)}
+  button.mini.danger:hover{color:var(--red); border-color:var(--red)}
+  button.mini.ok{color:var(--green); border-color:var(--green-border)}
+  button.mini.no{color:var(--red)}
+
+  .scroll{flex:1; overflow-y:auto; padding-right:4px; display:flex; flex-direction:column; gap:8px}
+  .card{background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:9px 12px}
+  .card.off{opacity:.5}
+  .card-h{display:flex; align-items:center; gap:10px}
+  .card-h b{font-size:13.5px}
+  .card-h .meta{color:var(--dim); font-size:12px}
+  .card-h .ops{margin-left:auto; display:flex; gap:5px}
+  .card .body{color:var(--dim); font-size:12.5px; margin-top:5px; white-space:pre-wrap; word-break:break-word; max-height:130px; overflow:auto}
+  .tag{display:inline-block; background:var(--tag-bg); color:var(--tag-fg); border-radius:5px; padding:0 7px; font-size:11px; margin-right:4px}
+  form.inline{display:flex; flex-wrap:wrap; gap:7px; padding:10px 0 12px; border-bottom:1px solid var(--line); margin-bottom:10px; flex:none}
+  form.inline input,form.inline select,form.inline textarea{background:var(--panel); border:1px solid var(--line); color:var(--txt); border-radius:7px; padding:7px 10px; font-size:13px; outline:none; font-family:inherit}
+  form.inline textarea{width:100%; min-height:52px; resize:vertical; font-family:Consolas,monospace; font-size:12.5px}
+  form.inline input.w-name{width:150px} form.inline input.w-time{width:190px} form.inline input.w-num{width:110px}
+  .sec-title{font-size:12px; color:var(--dim); margin:10px 0 6px; flex:none; text-transform:uppercase; letter-spacing:.06em}
+
+  /* DAG 流程图 */
+  #dag{flex:1; overflow:auto; position:relative; border:1px dashed var(--line); border-radius:10px; background:var(--dag-bg)}
+  #dag svg{position:absolute; left:0; top:0; pointer-events:none}
+  .dnode{position:absolute; width:200px; background:var(--panel2); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:9px; padding:7px 10px; cursor:grab; user-select:none; font-size:12.5px}
+  .dnode.off{opacity:.45; border-left-color:#555}
+  .dnode b{display:block; font-size:13px}
+  .dnode .meta{color:var(--dim); font-size:11px}
+  .dnode:hover{border-color:var(--accent)}
+
+  .right-head{display:flex; align-items:center; gap:10px; padding:9px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex:none; font-size:13px; color:var(--dim); flex-wrap:wrap}
+  .right-head b{color:var(--txt)}
+  #filters{display:flex; gap:4px; flex-wrap:wrap; padding:6px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex:none}
+  .fchip{background:var(--panel2); border:1px solid var(--line); color:var(--dim); border-radius:12px; padding:1px 9px; font-size:11.5px; cursor:pointer; user-select:none}
+  .fchip.on{color:var(--txt); border-color:var(--accent); background:var(--chip-on-bg)}
+  #stream{flex:1; overflow-y:auto; padding:10px 14px; display:flex; flex-direction:column; gap:5px; font-size:13px}
+  .ev{display:flex; gap:8px; padding:5px 10px; border-radius:7px; border-left:3px solid transparent; background:var(--ev-soft)}
+  .ev .ts{color:var(--ev-ts); font-size:11px; flex:none; padding-top:1px; font-family:Consolas,monospace}
+  .ev .tx{word-break:break-word; white-space:pre-wrap}
+  .ev .tx code{background:var(--code-bg); padding:1px 6px; border-radius:5px; font-size:12px; color:var(--code-fg); font-family:Consolas,monospace}
+  .ev pre{margin-top:4px; background:var(--pre-bg); border:1px solid var(--line); border-radius:7px; padding:7px 9px; max-height:180px; overflow:auto; font-size:12px; font-family:Consolas,monospace; color:var(--pre-fg); white-space:pre-wrap; word-break:break-all}
+  .t-chat{border-left-color:var(--chat-border)}      .t-ai{border-left-color:var(--green); background:rgba(62,207,142,.06)}
+  .t-stream{border-left-color:var(--stream-border); opacity:.8}
+  .t-thought{border-left-color:var(--accent); background:rgba(79,140,255,.06)}
+  .t-tool{border-left-color:var(--yellow)} .t-result{border-left-color:var(--result-border)}
+  .t-assist{border-left-color:var(--purple); background:rgba(176,124,255,.06)}
+  .t-heart{border-left-color:var(--pink); color:var(--heart-fg)}
+  .t-task{border-left-color:var(--orange)} .t-ext{border-left-color:var(--cyan)}
+  .t-auto{border-left-color:var(--green); background:rgba(62,207,142,.06)}
+  .t-err{border-left-color:var(--red); background:rgba(255,107,107,.09); color:var(--err-fg)}
+  .t-status,.t-config{opacity:.55}
+  .t-insight{border-left-color:var(--yellow); background:rgba(245,196,81,.07)}
+  .t-report{border-left-color:var(--cyan); background:rgba(79,216,224,.06)}
+  .t-inbound{border-left-color:var(--purple); background:rgba(138,108,255,.08)}
+  .t-goal{border-left-color:var(--green); background:rgba(62,207,142,.05)}
+  .t-eval{border-left-color:var(--cyan); background:rgba(79,216,224,.06)}
+  .t-debate{border-left-color:var(--purple); background:rgba(176,124,255,.08)}
+  .empty{color:var(--dim); text-align:center; padding:30px 0; font-size:13px}
+  .pending-box{border-color:#5a4a1e; background:rgba(245,196,81,.05)}
+  #theme-btn{border-color:var(--accent); color:var(--txt); padding:2px 11px; font-weight:600}
+  .audit{font-size:11.5px; color:var(--dim)}
+  ::-webkit-scrollbar{width:8px; height:8px} ::-webkit-scrollbar-thumb{background:var(--scrollbar); border-radius:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>💓 Heart<em>Agent</em></h1>
+  <span style="color:var(--dim);font-size:12.5px" data-i18n="hd.sub">双模型协作 · 自写扩展 · 目标驱动 · 无人值守</span>
+  <div class="hd-status">
+    <span><span class="dot"></span>心跳 <b id="hd-beats">-</b> · <b id="hd-beat">-</b></span>
+    <span>主 <b id="hd-main">-</b></span>
+    <span>协作 <b id="hd-assist">-</b></span>
+    <span>记忆 <b id="hd-mem">-</b></span>
+    <span>知识 <b id="hd-know">0</b></span>
+    <span>Tokens <b id="hd-tokens">0</b></span>
+    <span>💰 <b id="hd-wallet">-</b></span>
+    <select class="hsel" id="session-sel" title="切换会话"></select>
+    <button class="mini" id="session-new" data-i18n="session.new">＋会话</button>
+    <button class="mini" id="theme-btn" title="切换白天/夜间模式">☀️ 白天</button>
+    <button class="mini" id="lang-btn" title="Language / 语言">EN</button>
+    <button class="mini" id="export-btn" title="导出备份zip">⬇备份</button>
+  </div>
+</header>
+
+<main>
+  <section class="left">
+    <nav class="tabs">
+      <button data-tab="chat" class="on" data-i18n="nav.chat">💬 对话</button>
+      <button data-tab="tasks" data-i18n="nav.tasks">⏰ 任务</button>
+      <button data-tab="goals" data-i18n="nav.goals">🎯 目标</button>
+      <button data-tab="memory" data-i18n="nav.memory">🧠 记忆</button>
+      <button data-tab="ext" id="tab-ext-btn"><span data-i18n="nav.ext">🔧 扩展</span><span class="badge" id="ext-badge" hidden>0</span></button>
+      <button data-tab="lab" data-i18n="nav.lab">🧪 实验</button>
+    </nav>
+
+    <div class="tabsec" id="tab-chat">
+      <div id="chat"></div>
+      <div style="display:flex;gap:8px;align-items:center;padding:4px 0 0;flex:none;font-size:11.5px;color:var(--dim)">
+        <span data-i18n="chat.quick">快捷: /tasks /memory /ext /stop</span>
+        <button class="mini" id="export-chat" style="margin-left:auto" data-i18n="chat.export">⬇ 导出对话</button>
+        <label style="cursor:pointer"><input type="checkbox" id="tts-on"> <span data-i18n="chat.tts">🔊 朗读回复</span></label>
+      </div>
+      <form id="chat-form">
+        <input id="chat-input" placeholder="和主控AI聊聊…(可调用工具/协作AI/知识库,可中途停止)" data-i18n-ph="chat.input" autocomplete="off">
+        <button class="primary" id="send-btn" type="submit" data-i18n="chat.send">发送</button>
+        <button class="primary stop" id="stop-btn" type="button" hidden data-i18n="chat.stop">⏹ 停止</button>
+      </form>
+    </div>
+
+    <div class="tabsec" id="tab-tasks" hidden>
+      <form class="inline" id="task-form">
+        <input class="w-name" id="tk-name" placeholder="任务名称" required>
+        <select id="tk-kind">
+          <option value="loop">循环任务</option><option value="once">定时任务</option>
+          <option value="cron">cron表达式</option>
+        </select>
+        <input class="w-time" id="tk-at" placeholder="定时: 30m / 20:00 / 2026-09-26 09:00" hidden>
+        <input class="w-time" id="tk-cron" placeholder="cron: 分 时 日 月 周 如 0 9 * * 1-5" hidden>
+        <input class="w-num" id="tk-interval" placeholder="间隔(秒)" value="60">
+        <select id="tk-act"><option value="prompt">提示词(AI执行)</option><option value="code">Python代码</option></select>
+        <input class="w-num" id="tk-retry" placeholder="失败重试次数" value="0">
+        <textarea id="tk-payload" placeholder="提示词任务的指令,或 Python 代码(用 print 输出结果)"></textarea>
+        <button class="primary" type="submit">创建任务</button>
+        <button class="ghost" type="button" id="dag-toggle">🔀 流程图</button>
+      </form>
+      <div class="scroll" id="task-list"><div class="empty">加载中…</div></div>
+      <div id="dag" hidden></div>
+    </div>
+
+    <div class="tabsec" id="tab-goals" hidden>
+      <form class="inline" id="goal-form">
+        <input class="w-name" id="gl-title" placeholder="目标标题" required>
+        <input style="flex:1" id="gl-desc" placeholder="目标描述(可选,背景越足拆解越好)">
+        <input class="w-num" id="gl-hours" placeholder="检查间隔(h)" value="24">
+        <button class="primary" type="submit">设定目标</button>
+      </form>
+      <div class="scroll" id="goal-list"><div class="empty">加载中…</div></div>
+    </div>
+
+    <div class="tabsec" id="tab-memory" hidden>
+      <form class="inline" id="mem-form">
+        <input style="flex:1" id="mem-content" placeholder="手动写入一条长期记忆…" required>
+        <button class="primary" type="submit">写入</button>
+        <button class="ghost" type="button" id="mem-organize">🤝 整理近期对话</button>
+      </form>
+      <div class="scroll" id="mem-list"><div class="empty">加载中…</div></div>
+    </div>
+
+    <div class="tabsec" id="tab-ext" hidden>
+      <form class="inline" id="ext-form">
+        <input class="w-name" id="ex-name" placeholder="扩展名 如 web_title" required>
+        <input style="flex:1" id="ex-desc" placeholder="功能描述(留空代码栏则由主模型自动编写)">
+        <textarea id="ex-code" placeholder="(可选)直接粘贴扩展代码;留空则由 AI 生成,进入待审批队列"></textarea>
+        <button class="primary" type="submit">安装扩展</button>
+      </form>
+      <div class="scroll" id="ext-list"><div class="empty">加载中…</div></div>
+    </div>
+
+    <div class="tabsec" id="tab-lab" hidden>
+      <div class="scroll">
+        <div class="sec-title" data-i18n="sec.metrics">📊 运行指标</div>
+        <div class="card" id="metrics-box"><div class="empty">加载中…</div></div>
+        <div class="sec-title" data-i18n="sec.autonomy">🛡️ 自治等级(0旁观 · 1提案 · 2常规自治 · 3完全自治)</div>
+        <div class="card"><div class="card-h">
+          <select id="autonomy-sel" class="hsel" style="font-size:13px;padding:5px 8px">
+            <option value="0">L0 旁观</option><option value="1">L1 提案</option>
+            <option value="2">L2 常规自治</option><option value="3">L3 完全自治</option>
+          </select>
+          <span class="meta">低于 L2 时 AI 创建的任务/扩展默认停用待批</span>
+        </div></div>
+        <div class="sec-title" data-i18n="sec.eval">🧪 评估台 —— Agent 的单元测试与回归健康分</div>
+        <div class="card" id="eval-box"><div class="empty">加载中…</div></div>
+        <form class="inline" id="eval-form" style="border-bottom:none;margin-bottom:4px">
+          <input class="w-name" id="ev-name" placeholder="用例名" required>
+          <input style="flex:1;min-width:160px" id="ev-input" placeholder="模拟输入" required>
+          <input style="width:170px" id="ev-tools" placeholder="预期工具,逗号分隔(可空)">
+          <button class="primary" type="submit">添加用例</button>
+        </form>
+        <div class="sec-title" data-i18n="sec.replay">⏪ 思考回放与反事实对比</div>
+        <div class="card" id="replay-box"><div class="empty">加载中…</div></div>
+        <div class="sec-title" data-i18n="sec.debate">⚔️ 红蓝对抗辩论(困难决策)</div>
+        <div class="card"><div style="display:flex;gap:6px;flex-wrap:wrap">
+          <input id="db-topic" style="flex:1;min-width:180px" placeholder="辩题,如:该项目应该用微服务还是单体?">
+          <select id="db-rounds" class="hsel"><option value="1">1轮</option><option value="2" selected>2轮</option><option value="3">3轮</option></select>
+          <button class="primary" onclick="startDebate()">开始辩论</button>
+        </div><div class="body" style="max-height:none">正反方各执一词多轮交锋,裁判裁决并保留少数派异议,过程在右侧事件流实时可见。</div></div>
+        <div class="sec-title" data-i18n="sec.pack">🧠 心智包(导出/导入)与 💼 求职管家</div>
+        <div class="card"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <button class="mini" onclick="location.href='/api/export'">⬇ 导出心智包</button>
+          <input id="import-path" style="flex:1;min-width:170px" placeholder="导入:心智包zip的本地路径">
+          <button class="mini" onclick="importPack()">⬆ 导入(安全合并)</button>
+        </div>
+        <div class="body" style="display:flex;gap:6px;align-items:center">
+          <button class="mini ok" onclick="installPack()">💼 安装求职管家包</button>
+          <span style="font-size:11.5px">简历匹配/面试题库扩展进审批队列,并创建岗位追踪目标</span>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="right">
+    <div class="right-head">
+      <b data-i18n="right.head">🧠 思考过程</b><span data-i18n="right.sub">思考 · 工具 · 协作AI · 心跳 · 目标 · 外部消息 —— 实时透明</span>
+      <label style="margin-left:auto;cursor:pointer"><input type="checkbox" id="autoscroll" checked> <span data-i18n="right.autoscroll">自动滚动</span></label>
+      <button class="mini" id="clear-stream" data-i18n="right.clear">清空</button>
+    </div>
+    <div id="filters"></div>
+    <div id="stream"></div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let pending = false;
+
+/* ============ 国际化(中/英) ============ */
+const I18N = {
+  zh: {
+    'hd.sub':'双模型协作 · 自写扩展 · 目标驱动 · 无人值守',
+    'nav.chat':'💬 对话','nav.tasks':'⏰ 任务','nav.goals':'🎯 目标','nav.memory':'🧠 记忆','nav.ext':'🔧 扩展','nav.lab':'🧪 实验',
+    'chat.input':'和主控AI聊聊…(可调用工具/协作AI/知识库,可中途停止)',
+    'chat.send':'发送','chat.stop':'⏹ 停止','chat.quick':'快捷: /tasks /memory /ext /stop','chat.export':'⬇ 导出对话','chat.tts':'🔊 朗读回复',
+    'sec.metrics':'📊 运行指标',
+    'sec.autonomy':'🛡️ 自治等级(0旁观 · 1提案 · 2常规自治 · 3完全自治)',
+    'sec.eval':'🧪 评估台 —— Agent 的单元测试与回归健康分',
+    'sec.replay':'⏪ 思考回放与反事实对比',
+    'sec.debate':'⚔️ 红蓝对抗辩论(困难决策)',
+    'sec.pack':'🧠 心智包(导出/导入)与 💼 求职管家',
+    'right.head':'🧠 思考过程',
+    'right.sub':'思考 · 工具 · 协作AI · 心跳 · 目标 · 外部消息 —— 实时透明',
+    'right.autoscroll':'自动滚动','right.clear':'清空','session.new':'＋会话',
+  },
+  en: {
+    'hd.sub':'Dual-model · Self-extending · Goal-driven · Unattended',
+    'nav.chat':'💬 Chat','nav.tasks':'⏰ Tasks','nav.goals':'🎯 Goals','nav.memory':'🧠 Memory','nav.ext':'🔧 Exts','nav.lab':'🧪 Lab',
+    'chat.input':'Chat with the main AI… (tools / knowledge base, stoppable)',
+    'chat.send':'Send','chat.stop':'⏹ Stop','chat.quick':'Shortcuts: /tasks /memory /ext /stop','chat.export':'⬇ Export','chat.tts':'🔊 Speak reply',
+    'sec.metrics':'📊 Metrics',
+    'sec.autonomy':'🛡️ Autonomy level (0 watch · 1 propose · 2 auto · 3 full)',
+    'sec.eval':'🧪 Eval bench — agent unit tests & health score',
+    'sec.replay':'⏪ Replay & counterfactual',
+    'sec.debate':'⚔️ Red-blue debate (hard decisions)',
+    'sec.pack':'🧠 Mind pack (export/import) & 💼 Job hunter',
+    'right.head':'🧠 Thinking',
+    'right.sub':'Thoughts · tools · assistant · heartbeat · goals · inbound — live',
+    'right.autoscroll':'Auto-scroll','right.clear':'Clear','session.new':'＋New',
+  }
+};
+let LANG = localStorage.getItem('ha_lang') || 'zh';
+function t(k){ return (I18N[LANG] && I18N[LANG][k]) || I18N.zh[k] || k; }
+function applyLang(){
+  document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+  const lb = $('#lang-btn'); if (lb) lb.textContent = LANG === 'zh' ? 'EN' : '中文';
+}
+$('#lang-btn').onclick = () => {
+  LANG = LANG === 'zh' ? 'en' : 'zh';
+  localStorage.setItem('ha_lang', LANG);
+  applyLang();
+};
+
+let TOKEN = localStorage.getItem('ha_token') || '';
+async function api(path, body){
+  const headers = body !== undefined ? {'Content-Type':'application/json'} : {};
+  if (TOKEN) headers['X-HeartAgent-Token'] = TOKEN;
+  const opt = body !== undefined ? {method:'POST', headers, body:JSON.stringify(body)} : {headers};
+  const r = await fetch(path, opt);
+  if (r.status === 401){
+    TOKEN = prompt('需要访问令牌(config.json → security.token):') || '';
+    localStorage.setItem('ha_token', TOKEN);
+    return api(path, body);
+  }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+
+/* ============ 轻量 Markdown ============ */
+function md(src){
+  src = String(src ?? '');
+  const blocks = [];
+  src = src.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    blocks.push('<pre><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>');
+    return '\u0000B' + (blocks.length - 1) + '\u0000';
+  });
+  let h = esc(src);
+  h = h.replace(/^#{1,6} (.*)$/gm, '<h3>$1</h3>');
+  h = h.replace(/^---+$/gm, '<hr>');
+  h = h.replace(/^&gt; (.*)$/gm, '<p style="color:var(--quote-fg);border-left:3px solid var(--quote-border);padding-left:8px">$1</p>');
+  h = h.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/(^|\W)\*([^*\n]+)\*(?=\W|$)/g, '$1<i>$2</i>');
+  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  h = h.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  h = h.replace(/(^|\n)((?:[-*] .*(?:\n|$))+)/g, (_, p, list) =>
+    p + '<ul>' + list.trim().split(/\n/).map(x => '<li>' + x.replace(/^[-*] /, '') + '</li>').join('') + '</ul>');
+  h = h.replace(/(^|\n)((?:\d+\. .*(?:\n|$))+)/g, (_, p, list) =>
+    p + '<ol>' + list.trim().split(/\n/).map(x => '<li>' + x.replace(/^\d+\. /, '') + '</li>').join('') + '</ol>');
+  h = h.split(/\n{2,}/).map(x => /^<(h\d|ul|ol|pre|hr|p|div)/.test(x.trim()) || x.includes('\u0000B') ? x : '<p>' + x.replace(/\n/g, '<br>') + '</p>').join('\n');
+  h = h.replace(/\u0000B(\d+)\u0000/g, (_, i) => blocks[+i]);
+  return h;
+}
+
+/* ============ 右屏事件流 ============ */
+const TYPE_META = {
+  chat_user:{icon:'💬',cls:'t-chat',cat:'对话'}, chat_assistant:{icon:'🤖',cls:'t-ai',cat:'对话'},
+  chat_stream:{icon:'✍️',cls:'t-stream',cat:'对话'}, chat_retract:{icon:'↩️',cls:'t-thought',cat:'对话'},
+  thought:{icon:'🧠',cls:'t-thought',cat:'思考'}, tool:{icon:'🛠️',cls:'t-tool',cat:'工具'},
+  tool_result:{icon:'📥',cls:'t-result',cat:'工具'},
+  assistant_ai:{icon:'🤝',cls:'t-assist',cat:'协作'},
+  heartbeat:{icon:'💓',cls:'t-heart',cat:'心跳'}, status:{icon:'⚙️',cls:'t-status',cat:'心跳'},
+  config:{icon:'⚙️',cls:'t-config',cat:'心跳'},
+  task:{icon:'⏰',cls:'t-task',cat:'任务'}, extension:{icon:'🔧',cls:'t-ext',cat:'扩展'},
+  autonomous:{icon:'🎯',cls:'t-auto',cat:'任务'},
+  goal:{icon:'🎯',cls:'t-goal',cat:'目标'},
+  inbound:{icon:'📨',cls:'t-inbound',cat:'接入'},
+  shot:{icon:'📷',cls:'t-chat',cat:'对话'},
+  eval:{icon:'🧪',cls:'t-eval',cat:'评估'},
+  debate:{icon:'⚔️',cls:'t-debate',cat:'辩论'},
+  error:{icon:'⚠️',cls:'t-err',cat:'错误'},
+  insight:{icon:'💡',cls:'t-insight',cat:'洞察'}, report:{icon:'📊',cls:'t-report',cat:'洞察'},
+};
+const FILTER_DEFAULTS = {对话:1,思考:1,工具:1,协作:1,心跳:0,任务:1,扩展:1,目标:1,接入:1,评估:1,辩论:1,错误:1,洞察:1};
+const filterState = Object.assign({}, FILTER_DEFAULTS,
+  JSON.parse(localStorage.getItem('ha_filters') || '{}'));
+
+function buildFilterChips(){
+  $('#filters').innerHTML = Object.keys(filterState).map(cat =>
+    `<span class="fchip ${filterState[cat] ? 'on' : ''}" data-cat="${cat}">${cat}</span>`).join('');
+  document.querySelectorAll('.fchip').forEach(chip => chip.onclick = () => {
+    filterState[chip.dataset.cat] ^= 1;
+    localStorage.setItem('ha_filters', JSON.stringify(filterState));
+    buildFilterChips(); applyFilterVisibility();
+  });
+}
+function applyFilterVisibility(){
+  document.querySelectorAll('#stream .ev').forEach(el => {
+    el.style.display = filterState[el.dataset.cat] ? '' : 'none';
+  });
+}
+
+function renderEvent(ev, into){
+  const meta = TYPE_META[ev.type] || {icon:'·', cls:'', cat:'其它'};
+  const div = document.createElement('div');
+  div.className = 'ev ' + meta.cls;
+  div.dataset.cat = meta.cat;
+  let tx;
+  if (ev.type === 'tool')
+    tx = (ev.source && ev.source !== '对话' ? `<span style="color:var(--dim)">[${esc(ev.source)}]</span> ` : '') +
+         `<b>${esc(ev.name)}</b> <code>${esc(JSON.stringify(ev.args || {}))}</code>`;
+  else if (ev.type === 'tool_result')
+    tx = `<b>${esc(ev.name)}</b> 返回: <pre>${esc(ev.text)}</pre>`;
+  else if (ev.type === 'chat_stream')
+    tx = `<span style="color:var(--dim)">✍️ 生成中…</span>`;
+  else
+    tx = (ev.source && ev.source !== '对话' ? `<span style="color:var(--dim)">[${esc(ev.source)}]</span> ` : '') + esc(ev.text);
+  div.innerHTML = `<span class="ts">${esc(ev.ts || '')}</span><span class="ic">${meta.icon}</span><span class="tx">${tx}</span>`;
+  if (!filterState[meta.cat]) div.style.display = 'none';
+  into.appendChild(div);
+  if (into.children.length > 600) into.removeChild(into.firstChild);
+}
+
+let streamBubble = null;
+function onEvent(ev){
+  if (ev.type === 'chat_stream'){
+    if (!streamBubble){ streamBubble = appendChat('assistant', '', true); streamBubble.classList.add('streaming'); }
+    streamBubble.querySelector('.bubble').innerHTML = md(ev.text);
+    const c = $('#chat'); c.scrollTop = c.scrollHeight;
+    return;
+  }
+  if (ev.type === 'chat_retract'){
+    if (streamBubble){ streamBubble.remove(); streamBubble = null; }
+    renderEvent({type:'thought', ts:ev.ts, text:'(转思考)' + ev.text}, $('#stream'));
+    const st = $('#stream'); if ($('#autoscroll').checked) st.scrollTop = st.scrollHeight;
+    return;
+  }
+  renderEvent(ev, $('#stream'));
+  const st = $('#stream');
+  if ($('#autoscroll').checked) st.scrollTop = st.scrollHeight;
+  if (ev.type === 'chat_user') appendChat('user', ev.text);
+  if (ev.type === 'shot'){
+    const d = document.createElement('div');
+    d.className = 'msg ai';
+    d.innerHTML = `<div class="who">📷 屏幕截图</div><div class="bubble"><img src="${esc(ev.url)}" style="max-width:100%;border-radius:6px" alt="截图"></div>`;
+    $('#chat').appendChild(d);
+    $('#chat').scrollTop = $('#chat').scrollHeight;
+  }
+  if (ev.type === 'chat_assistant'){
+    if (streamBubble){ streamBubble.remove(); streamBubble = null; }
+    appendChat('assistant', ev.text);
+    if ($('#tts-on') && $('#tts-on').checked && ev.text)
+      api('/api/voice/speak', {text: ev.text}).catch(() => {});
+    setPending(false);
+  }
+  if (ev.type === 'error') setPending(false);
+  if (ev.type === 'status') updateHeader(ev);
+  if (ev.type === 'extension' || ev.type === 'config') refreshBadges();
+}
+
+function setPending(v){
+  pending = v;
+  $('#send-btn').disabled = v;
+  $('#send-btn').textContent = v ? '思考中…' : '发送';
+  $('#stop-btn').hidden = !v;
+  if (!v && streamBubble){ streamBubble.classList.remove('streaming'); streamBubble = null; }
+}
+
+function updateHeader(s){
+  if (s.beats !== undefined) $('#hd-beats').textContent = s.beats;
+  if (s.last_beat) $('#hd-beat').textContent = s.last_beat;
+}
+
+function fillSessions(state){
+  const sel = $('#session-sel');
+  sel.innerHTML = (state.session?.sessions || []).map(s =>
+    `<option value="${s.id}" ${s.current ? 'selected' : ''}>${esc(s.title)}</option>`).join('');
+}
+
+async function loadState(){
+  try{
+    const st = await api('/api/state');
+    $('#hd-main').textContent = st.model.main;
+    $('#hd-assist').textContent = st.model.assist;
+    $('#hd-mem').textContent = st.memory.facts + ' 条' + (st.memory.semantic ? '·语义' : '');
+    $('#hd-know').textContent = st.memory.knowledge || 0;
+    const w = st.wallet || {};
+    $('#hd-wallet').textContent = w.budget > 0
+      ? ('¥' + (w.spent || 0).toFixed(2) + '/' + w.budget.toFixed(0)) : '未设';
+    $('#hd-wallet').style.color = (w.budget > 0 && w.remaining <= 0) ? 'var(--red)' : '';
+    $('#hd-tokens').textContent = (st.usage ? Object.values(st.usage).reduce((a, v) =>
+      a + (v.prompt_tokens || 0) + (v.completion_tokens || 0), 0) : 0).toLocaleString();
+    $('#hd-beats').textContent = st.status.beats;
+    $('#hd-beat').textContent = st.status.last_beat;
+    fillSessions(st);
+    const badge = $('#ext-badge');
+    badge.hidden = !st.pending_extensions;
+    badge.textContent = st.pending_extensions;
+    const chat = $('#chat');
+    if (!pending){
+      chat.innerHTML = '';
+      st.chat_log.forEach(m => appendChat(m.role, m.content, true));
+      chat.scrollTop = chat.scrollHeight;
+    }
+  }catch(e){ console.error(e); }
+}
+
+/* ============ 对话 ============ */
+function appendChat(role, text, quiet){
+  const d = document.createElement('div');
+  d.className = 'msg ' + (role === 'user' ? 'user' : 'ai');
+  d.innerHTML = `<div class="who">${role === 'user' ? '🧑 我' : '🤖 主控AI'}</div><div class="bubble md"></div>`;
+  d.querySelector('.bubble').innerHTML = md(text);
+  $('#chat').appendChild(d);
+  $('#chat').scrollTop = $('#chat').scrollHeight;
+  return d;
+}
+
+$('#chat-form').onsubmit = async e => {
+  e.preventDefault();
+  const t = $('#chat-input').value.trim();
+  if (!t || pending) return;
+  $('#chat-input').value = '';
+  // 快捷命令:本地处理,不打扰主控AI
+  if (t.startsWith('/')){
+    const cmd = t.slice(1).toLowerCase();
+    if (cmd === 'stop'){ await api('/api/chat/stop', {}); return; }
+    if (cmd === 'tasks' || cmd === 'memory' || cmd === 'goals' || cmd === 'ext' || cmd === 'lab'){
+      document.querySelector(`nav.tabs button[data-tab=${cmd === 'ext' ? 'ext' : cmd}]`).click();
+      return;
+    }
+    appendChat('assistant', '可用快捷命令:\n/tasks 任务页 · /memory 记忆页 · /goals 目标页 · /ext 扩展页 · /lab 实验页 · /stop 停止生成');
+    return;
+  }
+  setPending(true);
+  try{ await api('/api/chat', {text: t}); }
+  catch(err){ setPending(false); alert('发送失败: ' + err.message); }
+  $('#chat-input').focus();
+};
+$('#export-chat').onclick = () => { location.href = '/api/export/chat.md'; };
+$('#stop-btn').onclick = async () => { try{ await api('/api/chat/stop', {}); }catch(e){} };
+
+$('#session-sel').onchange = async e => {
+  await api('/api/session', {op:'switch', id: e.target.value});
+  $('#chat').innerHTML = ''; loadState();
+};
+$('#session-new').onclick = async () => {
+  await api('/api/session', {op:'new'});
+  $('#chat').innerHTML = ''; loadState();
+};
+$('#export-btn').onclick = () => { location.href = '/api/export'; };
+
+/* ============ 主题切换(白天/夜间) ============ */
+function applyTheme(t){
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('ha_theme', t);
+  $('#theme-btn').textContent = t === 'light' ? '🌙 夜间' : '☀️ 白天';
+  $('#theme-btn').title = t === 'light' ? '切换到夜间模式' : '切换到白天模式';
+}
+$('#theme-btn').onclick = () => applyTheme(
+  (document.documentElement.dataset.theme || 'dark') === 'light' ? 'dark' : 'light');
+applyTheme(localStorage.getItem('ha_theme') ||
+  (window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+
+/* ============ 标签页 ============ */
+document.querySelectorAll('nav.tabs button').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('on', b === btn));
+    ['chat','tasks','goals','memory','ext','lab'].forEach(k => $('#tab-' + k).hidden = (k !== btn.dataset.tab));
+    if (btn.dataset.tab === 'tasks') loadTasks();
+    if (btn.dataset.tab === 'goals') loadGoals();
+    if (btn.dataset.tab === 'memory') loadMemory();
+    if (btn.dataset.tab === 'ext') loadExts();
+    if (btn.dataset.tab === 'lab') loadLab();
+  };
+});
+function refreshBadges(){
+  api('/api/state').then(st => {
+    const badge = $('#ext-badge');
+    badge.hidden = !st.pending_extensions;
+    badge.textContent = st.pending_extensions;
+  }).catch(() => {});
+}
+
+/* ============ 任务 ============ */
+$('#tk-kind').onchange = e => {
+  const k = e.target.value;
+  $('#tk-interval').hidden = k !== 'loop';
+  $('#tk-at').hidden = k !== 'once';
+  $('#tk-cron').hidden = k !== 'cron';
+};
+let dagView = false;
+$('#dag-toggle').onclick = () => {
+  dagView = !dagView;
+  $('#dag-toggle').textContent = dagView ? '📋 列表' : '🔀 流程图';
+  $('#dag').hidden = !dagView;
+  $('#task-list').style.display = dagView ? 'none' : '';
+  if (dagView) renderDag();
+};
+
+async function loadTasks(){
+  const j = await api('/api/tasks');
+  window._tasks = j.tasks;
+  if (dagView){ renderDag(); return; }
+  $('#task-list').innerHTML = j.tasks.map(t => {
+    const sch = t.schedule.kind === 'once' ? `一次性 @ ${esc(t.schedule.at)}`
+      : t.schedule.kind === 'cron' ? `cron ${esc(t.schedule.expr)}`
+      : `循环 每 ${t.schedule.interval_sec}s`;
+    const act = t.action.kind === 'prompt' ? '🤖 AI' : '🐍 代码';
+    const retry = t.retry && t.retry.max ? ` · ↻重试${t.retry.max}` : '';
+    const chain = t.chain && (t.chain.on_success || t.chain.on_failure)
+      ? ` · 🔗→${esc(t.chain.on_success || t.chain.on_failure)}` : '';
+    const hist = t.history && t.history.length
+      ? `<div class="body">[${esc(t.history[t.history.length-1].ts)}] ${t.history[t.history.length-1].ok ? '✅' : '❌'} ${esc(t.history[t.history.length-1].output)}</div>` : '';
+    return `<div class="card ${t.enabled ? '' : 'off'}" data-id="${t.id}">
+      <div class="card-h"><b>${esc(t.name)}</b><span class="meta">${sch} · ${act}${retry}${chain} · 下次 ${esc(t.next_run || '—')}</span>
+        <span class="ops">
+          <button class="mini" onclick="taskOp('${t.id}','run')">▶ 运行</button>
+          <button class="mini" onclick="taskEdit('${t.id}')">✏ 编辑</button>
+          <button class="mini" onclick="taskOp('${t.id}','toggle')">${t.enabled ? '⏸ 停用' : '▶ 启用'}</button>
+          <button class="mini danger" onclick="taskOp('${t.id}','delete')">🗑</button>
+        </span></div>${hist}</div>`;
+  }).join('') || '<div class="empty">还没有任务,创建一个吧</div>';
+}
+
+/* ---------- DAG 流程图 ---------- */
+function renderDag(){
+  const tasks = window._tasks || [];
+  const box = $('#dag');
+  if (!tasks.length){ box.innerHTML = '<div class="empty" style="margin-top:60px">暂无任务节点</div>'; return; }
+  const byName = {}; tasks.forEach(t => byName[t.name] = t);
+  const edges = [];
+  tasks.forEach(t => {
+    const c = t.chain || {};
+    if (c.on_success && byName[c.on_success]) edges.push({from: t, to: byName[c.on_success], kind: 'ok'});
+    if (c.on_failure && byName[c.on_failure]) edges.push({from: t, to: byName[c.on_failure], kind: 'fail'});
+  });
+  // 分层:无入边=0层,否则父层+1
+  const level = {}; tasks.forEach(t => level[t.id] = 0);
+  for (let i = 0; i < 10; i++){
+    let changed = false;
+    edges.forEach(e => {
+      if (level[e.to.id] < level[e.from.id] + 1){ level[e.to.id] = level[e.from.id] + 1; changed = true; }
+    });
+    if (!changed) break;
+  }
+  const pos = JSON.parse(localStorage.getItem('ha_dag_pos') || '{}');
+  const cols = {};
+  const NW = 200, NH = 64, GX = 60, GY = 26;
+  tasks.forEach(t => {
+    const l = level[t.id];
+    cols[l] = cols[l] || [];
+    const saved = pos[t.id];
+    t._x = saved ? saved.x : 16 + l * (NW + GX);
+    t._y = saved ? saved.y : 16 + cols[l].length * (NH + GY);
+    cols[l].push(t);
+  });
+  const W = Math.max(400, ...tasks.map(t => t._x + NW + 20));
+  const H = Math.max(300, ...tasks.map(t => t._y + NH + 20));
+  const cx = t => t._x + NW / 2, cy = t => t._y + NH / 2;
+  let lines = '';
+  edges.forEach(e => {
+    const x1 = cx(e.from), y1 = cy(e.from), x2 = cx(e.to), y2 = cy(e.to);
+    const color = e.kind === 'ok' ? 'var(--green)' : 'var(--red)';
+    const label = e.kind === 'ok' ? '成功→' : '失败→';
+    lines += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" style="stroke:${color}" stroke-width="1.6" marker-end="url(#arw)"/>`
+      + `<text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 5}" style="fill:${color}" font-size="10" text-anchor="middle">${label}</text>`;
+  });
+  box.innerHTML = `<svg width="${W}" height="${H}">
+    <defs><marker id="arw" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L7,3 L0,6 z" style="fill:var(--ev-ts)"/></marker></defs>${lines}</svg>`
+    + tasks.map(t => `<div class="dnode ${t.enabled ? '' : 'off'}" data-id="${t.id}"
+        style="left:${t._x}px;top:${t._y}px">
+        <b>${esc(t.name)}</b>
+        <span class="meta">${t.schedule.kind === 'cron' ? 'cron ' + esc(t.schedule.expr) : t.schedule.kind === 'once' ? esc(t.schedule.at || '') : '每' + t.schedule.interval_sec + 's'} · ${t.action.kind === 'prompt' ? 'AI' : '代码'}</span>
+      </div>`).join('');
+  box.querySelectorAll('.dnode').forEach(node => {
+    const t = tasks.find(x => x.id === node.dataset.id);
+    let sx, sy, ox, oy, moved = false;
+    node.onpointerdown = e => {
+      sx = e.clientX; sy = e.clientY; ox = t._x; oy = t._y; moved = false;
+      node.setPointerCapture(e.pointerId);
+      node.onpointermove = ev => {
+        if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 4) moved = true;
+        t._x = Math.max(0, ox + ev.clientX - sx); t._y = Math.max(0, oy + ev.clientY - sy);
+        node.style.left = t._x + 'px'; node.style.top = t._y + 'px';
+        renderDagLinesOnly();
+      };
+      node.onpointerup = () => {
+        node.onpointermove = null;
+        if (moved){ pos[t.id] = {x: t._x, y: t._y}; localStorage.setItem('ha_dag_pos', JSON.stringify(pos)); }
+        else { dagView = false; $('#dag-toggle').textContent = '🔀 流程图'; $('#dag').hidden = true;
+               $('#task-list').style.display = ''; loadTasks().then(() => taskEdit(t.id)); }
+      };
+    };
+  });
+}
+function renderDagLinesOnly(){ renderDag(); }  // 拖动时重画(简化实现)
+
+$('#task-form').onsubmit = async e => {
+  e.preventDefault();
+  const kind = $('#tk-kind').value, act = $('#tk-act').value, payload = $('#tk-payload').value.trim();
+  const body = {
+    name: $('#tk-name').value.trim(),
+    schedule: kind === 'loop' ? {kind:'loop', interval_sec: parseInt($('#tk-interval').value || '60', 10)}
+      : kind === 'cron' ? {kind:'cron', expr: $('#tk-cron').value.trim()}
+      : {kind:'once', at: $('#tk-at').value.trim()},
+    action: act === 'prompt' ? {kind:'prompt', text: payload} : {kind:'code', code: payload},
+    retry: {max: parseInt($('#tk-retry').value || '0', 10), backoff_sec: 30},
+  };
+  try{ await api('/api/tasks', body); $('#tk-payload').value = ''; $('#tk-name').value = ''; loadTasks(); }
+  catch(err){ alert('创建失败: ' + err.message); }
+};
+
+async function taskOp(id, op){
+  try{ await api('/api/tasks/op', {id, op}); }
+  catch(err){ alert(err.message); }
+  loadTasks();
+}
+
+async function taskEdit(id){
+  const tasks = (window._tasks || []);
+  const t = tasks.find(x => x.id === id);
+  if (!t) return;
+  if (dagView){ dagView = false; $('#dag-toggle').textContent = '🔀 流程图';
+    $('#dag').hidden = true; $('#task-list').style.display = ''; await loadTasks(); }
+  const card = document.querySelector(`#task-list .card[data-id="${id}"]`);
+  if (!card) return;
+  const others = tasks.filter(x => x.id !== id).map(x =>
+    `<option value="${esc(x.name)}">成功→${esc(x.name)}</option>`).join('');
+  const othersF = tasks.filter(x => x.id !== id).map(x =>
+    `<option value="${esc(x.name)}">失败→${esc(x.name)}</option>`).join('');
+  card.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <input style="flex:1;min-width:140px;background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:6px" id="ed-name-${id}" value="${esc(t.name)}">
+      ${t.schedule.kind === 'loop' ? `<input style="width:110px;background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:6px" id="ed-int-${id}" value="${t.schedule.interval_sec}" title="间隔秒">` : ''}
+      ${t.schedule.kind === 'cron' ? `<input style="width:170px;background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:6px" id="ed-cron-${id}" value="${esc(t.schedule.expr)}" title="cron">` : ''}
+      <button class="mini ok" onclick="taskSave('${id}')">💾 保存</button>
+      <button class="mini" onclick="loadTasks()">取消</button>
+    </div>
+    <textarea id="ed-payload-${id}" style="width:100%;min-height:70px;background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:7px;font-family:Consolas,monospace;font-size:12.5px">${esc(t.action.kind === 'prompt' ? (t.action.text || '') : (t.action.code || ''))}</textarea>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <select id="ed-chain-s-${id}" style="background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:5px;font-size:12px">
+        <option value="">(成功后无后续)</option>${others}</select>
+      <select id="ed-chain-f-${id}" style="background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:5px;font-size:12px">
+        <option value="">(失败后无后续)</option>${othersF}</select>
+    </div></div>`;
+  document.getElementById('ed-chain-s-' + id).value = (t.chain && t.chain.on_success) || '';
+  document.getElementById('ed-chain-f-' + id).value = (t.chain && t.chain.on_failure) || '';
+}
+
+async function taskSave(id){
+  const patch = {name: document.getElementById('ed-name-' + id).value.trim()};
+  const intEl = document.getElementById('ed-int-' + id);
+  const cronEl = document.getElementById('ed-cron-' + id);
+  if (intEl) patch.schedule = {kind:'loop', interval_sec: parseInt(intEl.value || '60', 10)};
+  if (cronEl) patch.schedule = {kind:'cron', expr: cronEl.value.trim()};
+  patch.action = {kind: 'prompt', text: document.getElementById('ed-payload-' + id).value};
+  const cs = document.getElementById('ed-chain-s-' + id).value;
+  const cf = document.getElementById('ed-chain-f-' + id).value;
+  patch.chain = {on_success: cs || null, on_failure: cf || null};
+  try{ await api('/api/tasks/op', {id, op:'update', patch}); }
+  catch(err){ alert('保存失败: ' + err.message); }
+  loadTasks();
+}
+
+/* ============ 目标 ============ */
+async function loadGoals(){
+  const j = await api('/api/goals');
+  $('#goal-list').innerHTML = j.goals.map(g => {
+    const prog = (g.progress || []).slice(-3).reverse().map(p =>
+      `<div style="color:var(--dim);font-size:12px">· [${esc(p.ts)}] ${esc(p.note)}</div>`).join('');
+    const stTag = g.status === 'active' ? '🟢进行中' : g.status === 'paused' ? '⏸暂停' : g.status === 'done' ? '✅完成' : '⚫放弃';
+    return `<div class="card ${g.status === 'active' ? '' : 'off'}" data-gid="${g.id}">
+      <div class="card-h"><b>🎯 ${esc(g.title)}</b><span class="meta">${stTag} · 每${g.check_every_hours}h检查 · 上次 ${esc(g.last_check || '未检查')}</span>
+        <span class="ops">
+          <button class="mini" onclick="goalOp('${g.id}','check')">🔍 检查</button>
+          <button class="mini" onclick="goalOp('${g.id}','pause')">${g.status === 'paused' ? '▶ 恢复' : '⏸ 暂停'}</button>
+          <button class="mini ok" onclick="goalOp('${g.id}','done')">✅ 完成</button>
+          <button class="mini danger" onclick="goalOp('${g.id}','delete')">🗑</button>
+        </span></div>
+      ${g.description ? `<div class="body">${esc(g.description)}</div>` : ''}${prog}</div>`;
+  }).join('') || '<div class="empty">还没有目标 —— 设一个,主控AI会自动拆解成任务并定期检查</div>';
+}
+
+$('#goal-form').onsubmit = async e => {
+  e.preventDefault();
+  try{ await api('/api/goals', {title: $('#gl-title').value.trim(),
+    description: $('#gl-desc').value.trim(),
+    check_every_hours: parseInt($('#gl-hours').value || '24', 10)});
+    $('#gl-title').value = ''; $('#gl-desc').value = ''; loadGoals(); }
+  catch(err){ alert('创建失败: ' + err.message); }
+};
+
+async function goalOp(id, op){
+  let body = {id, op};
+  if (op === 'pause'){
+    const j = await api('/api/goals');
+    const g = j.goals.find(x => x.id === id);
+    body = {id, op: 'update', status: g && g.status === 'paused' ? 'active' : 'paused'};
+  }
+  if (op === 'done') body = {id, op: 'update', status: 'done'};
+  try{ await api('/api/goals/op', body); }
+  catch(err){ alert(err.message); }
+  loadGoals();
+}
+
+/* ============ 记忆 ============ */
+async function loadMemory(){
+  const j = await api('/api/memory');
+  const confs = await api('/api/conflicts').catch(() => ({conflicts: []}));
+  const graph = await api('/api/graph').catch(() => ({nodes: [], edges: []}));
+  const conflictCards = (confs.conflicts || []).filter(c => c.status === 'open').map(c =>
+    `<div class="card pending-box"><div class="card-h"><b>⚔️ 记忆冲突</b>
+      <span class="meta">${esc(c.created_at)}</span>
+      <span class="ops">
+        <button class="mini ok" onclick="conflictOp('${c.id}','keep_a')">前者对</button>
+        <button class="mini ok" onclick="conflictOp('${c.id}','keep_b')">后者对</button>
+        <button class="mini" onclick="conflictOp('${c.id}','dismiss')">误报</button>
+      </span></div>
+      <div class="body">A: ${esc(c.a_text)}\nB: ${esc(c.b_text)}\n🤔 ${esc(c.question)}</div></div>`).join('');
+  const facts = j.facts.map(f =>
+    `<div class="card" data-fid="${f.id}"><div class="card-h"><b>${esc(f.content)}</b>
+      <span class="ops">
+        <button class="mini" onclick="memEdit('${f.id}')">✏</button>
+        <button class="mini danger" onclick="memDel('${f.id}')">🗑</button>
+      </span></div>
+      <div class="body">${f.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}来源: ${esc(f.source)} · ${esc(f.updated_at || f.created_at)} · 命中${f.hits || 0}</div></div>`)
+    .join('');
+  const sums = j.summaries.map(s =>
+    `<div class="card"><div class="card-h"><span class="meta">${s.kind === 'reflection' ? '💡 反思' : s.kind === 'report' ? '📊 日报' : '📝 摘要'} · ${esc(s.created_at)}</span></div><div class="body">${esc(s.summary)}</div></div>`)
+    .join('');
+  $('#mem-list').innerHTML =
+    (conflictCards ? '<div class="sec-title">⚔️ 待澄清的记忆冲突(睡眠整理发现)</div>' + conflictCards : '') +
+    (graph.edges && graph.edges.length ? '<div class="sec-title">🕸️ 记忆图谱(实体关系)</div><div class="card" id="graph-box"></div>' : '') +
+    (facts ? '<div class="sec-title">长期记忆 (' + j.facts.length + ')</div>' + facts : '<div class="empty">还没有长期记忆</div>') +
+    (sums ? '<div class="sec-title">摘要 / 反思 / 日报 (' + j.summaries.length + ')</div>' + sums : '');
+  if (graph.edges && graph.edges.length) renderGraph(graph);
+}
+function renderGraph(data){
+  const nodes = data.nodes.map(n => ({...n, x: 0, y: 0, vx: 0, vy: 0}));
+  const idx = {}; nodes.forEach((n, i) => idx[n.id] = i);
+  const W = 560, H = 320;
+  nodes.forEach((n, i) => {  // 初始圆环布局
+    const a = 2 * Math.PI * i / nodes.length;
+    n.x = W/2 + Math.cos(a) * 110; n.y = H/2 + Math.sin(a) * 90;
+  });
+  for (let it = 0; it < 120; it++){  // 简易弹簧-斥力模型
+    for (let i = 0; i < nodes.length; i++) for (let j = i+1; j < nodes.length; j++){
+      const a = nodes[i], b = nodes[j];
+      let dx = a.x - b.x, dy = a.y - b.y;
+      let d2 = dx*dx + dy*dy || 1;
+      let f = 2200 / d2;
+      const d = Math.sqrt(d2);
+      dx /= d; dy /= d;
+      a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f;
+    }
+    data.edges.forEach(e => {
+      const a = nodes[idx[e.s]], b = nodes[idx[e.o]];
+      if (!a || !b) return;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.sqrt(dx*dx + dy*dy) || 1;
+      const f = (d - 120) * 0.03;
+      a.vx += dx/d * f; a.vy += dy/d * f;
+      b.vx -= dx/d * f; b.vy -= dy/d * f;
+    });
+    nodes.forEach(n => {
+      n.vx += (W/2 - n.x) * 0.002; n.vy += (H/2 - n.y) * 0.002;  // 向心
+      n.x += Math.max(-8, Math.min(8, n.vx)); n.y += Math.max(-8, Math.min(8, n.vy));
+      n.vx *= 0.6; n.vy *= 0.6;
+      n.x = Math.max(45, Math.min(W-45, n.x)); n.y = Math.max(28, Math.min(H-28, n.y));
+    });
+  }
+  const deg = {}; nodes.forEach(n => deg[n.id] = n.degree);
+  let svg = `<svg width="100%" height="${H}" style="display:block">`;
+  data.edges.forEach(e => {
+    const a = nodes[idx[e.s]], b = nodes[idx[e.o]];
+    svg += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--line)" stroke-width="1.5"/>
+      <text x="${(a.x+b.x)/2}" y="${(a.y+b.y)/2 - 4}" fill="var(--dim)" font-size="10" text-anchor="middle">${esc(e.r)}</text>`;
+  });
+  nodes.forEach(n => {
+    const r = 8 + Math.min(10, n.degree * 2);
+    svg += `<circle cx="${n.x}" cy="${n.y}" r="${r}" fill="var(--accent)" opacity="0.85"/>
+      <text x="${n.x}" y="${n.y - r - 4}" fill="var(--txt)" font-size="11" text-anchor="middle">${esc(n.label)}</text>`;
+  });
+  $('#graph-box').innerHTML = svg + '</svg>';
+}
+async function conflictOp(id, op){
+  await api('/api/conflicts/op', {id, op});
+  loadMemory();
+}
+
+$('#mem-form').onsubmit = async e => {
+  e.preventDefault();
+  const c = $('#mem-content').value.trim();
+  if (!c) return;
+  try{ await api('/api/memory/add', {content: c}); $('#mem-content').value = ''; loadMemory(); }
+  catch(err){ alert(err.message); }
+};
+$('#mem-organize').onclick = async () => {
+  try{ const r = await api('/api/memory/organize', {});
+    alert(r.added ? `协作AI整理完成,新增 ${r.added} 条记忆` : '协作AI检查完毕,没有需要沉淀的新记忆');
+    loadMemory(); }
+  catch(err){ alert(err.message); }
+};
+async function memDel(id){ await api('/api/memory/delete', {id}); loadMemory(); }
+
+async function memEdit(id){
+  const j = await api('/api/memory');
+  const f = j.facts.find(x => x.id === id);
+  if (!f) return;
+  const card = document.querySelector(`#mem-list .card[data-fid="${id}"]`);
+  card.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px">
+    <textarea id="mf-content-${id}" style="width:100%;min-height:44px;background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:7px">${esc(f.content)}</textarea>
+    <div style="display:flex;gap:6px">
+      <input style="flex:1" id="mf-tags-${id}" value="${esc(f.tags.join(', '))}" placeholder="标签,逗号分隔">
+      <button class="mini ok" onclick="memSave('${id}')">💾 保存</button>
+      <button class="mini" onclick="loadMemory()">取消</button>
+    </div></div>`;
+}
+async function memSave(id){
+  const content = document.getElementById('mf-content-' + id).value.trim();
+  const tags = document.getElementById('mf-tags-' + id).value.split(',').map(x => x.trim()).filter(Boolean);
+  await api('/api/memory/update', {id, content, tags});
+  loadMemory();
+}
+
+/* ============ 扩展 ============ */
+async function loadExts(){
+  const j = await api('/api/extensions');
+  const trustMap = {};
+  (j.trust || []).forEach(t => trustMap[t.name] = t);
+  const pend = (j.pending || []).map(p =>
+    `<div class="card pending-box"><div class="card-h"><b>⏳ ${esc(p.name)}</b><span class="meta">${esc(p.description)} · 待审批</span>
+      <span class="ops">
+        <button class="mini ok" onclick="extApprove('${esc(p.name)}', true)">✅ 批准</button>
+        <button class="mini no" onclick="extApprove('${esc(p.name)}', false)">❌ 拒绝</button>
+      </span></div>
+      <pre class="body" style="max-height:220px">${esc(p.code)}</pre></div>`).join('');
+  const exts = (j.extensions || []).map(x => {
+    const u = (j.usage || {})[x.name] || {};
+    const t = trustMap[x.name] || {level:1, score:55, caps:[]};
+    const lvName = ['L0 需人工','L1 可调用','L2 高信任','L3 全自治'][t.level] || 'L1';
+    return `<div class="card"><div class="card-h"><b>🔧 ${esc(x.name)}</b>
+      <span class="meta">${esc(x.description)} · 调用${u.calls || 0}次</span>
+      <span class="ops"><button class="mini danger" onclick="extDel('${esc(x.name)}')">🗑</button></span></div>
+      <div class="body">🛡️ 信任 ${lvName}(${t.score}分)${(t.caps || []).length ? ' · 能力令牌: ' + t.caps.map(c => `<span class="tag">${esc(c)}</span>`).join('') : ' · 无高危能力'}
+      </div>
+      <div class="body" style="display:flex;gap:6px;align-items:flex-start">
+        <input style="flex:1" id="exargs-${esc(x.name)}" placeholder='参数 JSON(可留空)' value="">
+        <button class="mini" onclick="extCall('${esc(x.name)}')">▶ 调用</button></div>
+      <pre class="body" id="exres-${esc(x.name)}" style="display:none"></pre></div>`;
+  }).join('');
+  const audit = (j.audit || []).map(a =>
+    `<div class="audit">[${esc(a.ts)}] ${esc(a.action)} · ${esc(a.name)}</div>`).join('');
+  $('#ext-list').innerHTML =
+    (pend ? '<div class="sec-title">待审批(自写扩展需人工确认)</div>' + pend : '') +
+    (exts ? '<div class="sec-title">已安装 (' + j.extensions.length + ')</div>' + exts : '<div class="empty">还没有扩展 —— 让主控AI write_extension,或在上方安装</div>') +
+    (audit ? '<div class="sec-title">审计日志</div>' + audit : '');
+}
+
+$('#ext-form').onsubmit = async e => {
+  e.preventDefault();
+  const body = {name: $('#ex-name').value.trim(), description: $('#ex-desc').value.trim()};
+  const code = $('#ex-code').value.trim();
+  if (code) body.code = code;
+  try{ await api('/api/extensions/generate', body); $('#ex-name').value = ''; $('#ex-code').value = ''; loadExts(); }
+  catch(err){ alert('安装失败: ' + err.message); }
+};
+
+async function extApprove(name, decision){
+  try{ const r = await api('/api/extensions/approve', {name, decision});
+    if (!r.ok) alert(r.error || '操作失败'); }
+  catch(err){ alert(err.message); }
+  loadExts(); refreshBadges();
+}
+async function extCall(name){
+  let args = {};
+  const raw = ($('#exargs-' + CSS.escape(name)) || {value:''}).value || '';
+  if (raw.trim()){ try{ args = JSON.parse(raw); }catch(e){ return alert('参数不是合法 JSON'); } }
+  const r = await api('/api/extensions/call', {name, args});
+  const pre = $('#exres-' + CSS.escape(name));
+  pre.style.display = 'block';
+  pre.textContent = JSON.stringify(r, null, 1);
+}
+async function extDel(name){ await api('/api/extensions/delete', {name}); loadExts(); }
+
+/* ============ 实验室:评估/回放/辩论/包/自治 ============ */
+async function loadLab(){
+  const st = await api('/api/state');
+  $('#autonomy-sel').value = String(st.autonomy ?? 2);
+  loadMetrics();
+  loadEvals();
+  loadReplay();
+}
+
+function sparkline(hist){
+  if (!hist || hist.length < 2) return '';
+  const w = 320, h = 40;
+  const pts = hist.map((e, i) =>
+    `${(i / (hist.length - 1)) * (w - 8) + 4},${h - 6 - (e.score / 100) * (h - 12)}`).join(' ');
+  return `<svg width="${w}" height="${h}" style="display:block;margin:6px 0 0">
+    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>`;
+}
+
+async function loadMetrics(){
+  try{
+    const m = await api('/api/metrics');
+    const tok = Object.values(m.tokens || {}).reduce((a, v) =>
+      a + (v.prompt_tokens || 0) + (v.completion_tokens || 0), 0);
+    $('#metrics-box').innerHTML = `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px">
+      <span>⏱ 运行 <b>${(m.uptime_s / 3600).toFixed(1)}h</b></span>
+      <span>💓 心跳 <b>${m.beats}</b></span>
+      <span>🔢 Tokens <b>${tok.toLocaleString()}</b></span>
+      <span>⏰ 任务 <b>${m.tasks.count}</b> · 成功率 <b>${m.tasks.success_rate}%</b></span>
+      <span>🧠 记忆 <b>${m.memory.facts}</b> / 知识 <b>${m.memory.knowledge}</b></span>
+      <span>🔧 扩展 <b>${m.extensions}</b></span>
+      <span>💰 花费 <b>¥${(m.wallet.spent || 0).toFixed(2)}</b>${m.wallet.budget > 0 ? '/' + m.wallet.budget : ''}</span>
+      <span>🧪 健康分 <b>${m.eval_score === null ? '未测' : m.eval_score}</b></span>
+    </div>${sparkline(m.eval_history || [])}`;
+  }catch(e){}
+}
+
+async function loadEvals(){
+  const j = await api('/api/evals');
+  const hist = j.history || [];
+  const w = 320, h = 44;
+  let spark = '';
+  if (hist.length > 1){
+    const pts = hist.map((e2, i) =>
+      `${(i / (hist.length - 1)) * (w - 8) + 4},${h - 6 - (e2.score / 100) * (h - 12)}`).join(' ');
+    spark = `<svg width="${w}" height="${h}" style="display:block;margin:4px 0">
+      <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>`;
+  }
+  $('#eval-box').innerHTML = `
+    <div class="card-h"><b>${j.last_score === null ? '尚未运行' : '健康分 ' + j.last_score}</b>
+      <span class="meta">${hist.length ? '最近 ' + esc(hist[hist.length-1].ts) + ' · ' + hist[hist.length-1].passed + '/' + hist[hist.length-1].total + ' 通过' : ''}</span>
+      <span class="ops"><button class="mini ok" onclick="runEvals()">▶ 运行回归</button></span></div>
+    ${spark}
+    <div class="body">${(j.cases || []).map(c => `· ${esc(c.name)}${c.expect_tools.length ? ' (预期工具: ' + esc(c.expect_tools.join(',')) + ')' : ''}`).join('\n') || '无用例'}</div>`;
+}
+async function runEvals(){
+  await api('/api/evals/run', {});
+  setTimeout(loadEvals, 2500);
+  setTimeout(loadEvals, 6000);
+}
+$('#eval-form').onsubmit = async e => {
+  e.preventDefault();
+  const tools = $('#ev-tools').value.split(',').map(s => s.trim()).filter(Boolean);
+  try{ await api('/api/evals/case', {name: $('#ev-name').value.trim(),
+    input: $('#ev-input').value.trim(), expect_tools: tools});
+    $('#ev-name').value = ''; $('#ev-input').value = ''; $('#ev-tools').value = '';
+    loadEvals(); }
+  catch(err){ alert(err.message); }
+};
+
+let replayGroups = [];
+async function loadReplay(){
+  const j = await api('/api/replay');
+  replayGroups = j.groups || [];
+  $('#replay-box').innerHTML = replayGroups.length
+    ? `<div class="body">${replayGroups.slice().reverse().map(g =>
+        `<div style="margin:2px 0">[${esc(g.ts)}] <a href="javascript:void(0)" onclick="viewGroup(${g.id})">${esc(g.label || '(空)')}</a>
+         <span style="color:var(--dim)">${g.events.length} 事件</span>
+         <button class="mini" onclick="forkGroup(${g.id})">⏪ 反事实(协作模型)</button></div>`).join('')}</div>`
+    : '<div class="empty">暂无回放记录(对话后会自动落盘)</div>';
+}
+function viewGroup(gid){
+  const g = replayGroups.find(x => x.id === gid);
+  if (!g) return;
+  $('#stream').innerHTML = '';
+  g.events.forEach(ev => { if (ev.type !== 'chat_stream') renderEvent(ev, $('#stream')); });
+  $('#stream').scrollTop = $('#stream').scrollHeight;
+}
+async function forkGroup(gid){
+  const g = replayGroups.find(x => x.id === gid);
+  if (!g) return;
+  const first = g.events.find(e2 => e2.type === 'chat_user' || e2.type === 'inbound');
+  if (!first) return alert('该组没有起始输入');
+  const btnNotice = document.createElement('div');
+  btnNotice.className = 'ev t-thought';
+  btnNotice.innerHTML = `<span class="ic">⏪</span><span class="tx">反事实重演中(协作模型重跑:「${esc(first.text)}」)…</span>`;
+  $('#stream').appendChild(btnNotice);
+  $('#stream').scrollTop = $('#stream').scrollHeight;
+  const r = await api('/api/replay/fork', {text: first.text, model: 'assist'});
+  btnNotice.querySelector('.tx').textContent = '⏪ 反事实结果(协作模型): ' + r.final;
+}
+
+async function startDebate(){
+  const topic = $('#db-topic').value.trim();
+  if (!topic) return alert('先输入辩题');
+  await api('/api/debate', {topic, rounds: parseInt($('#db-rounds').value, 10)});
+}
+async function installPack(){
+  try{ const r = await api('/api/pack/install', {name: 'job_hunter'});
+    alert('求职管家已安装:' + (r.extensions_pending || []).join(', ') + ' 进入审批队列;目标已创建。'); }
+  catch(err){ alert(err.message); }
+  refreshBadges();
+}
+async function importPack(){
+  const p = $('#import-path').value.trim();
+  if (!p) return alert('先填心智包 zip 的本地路径');
+  try{ const r = await api('/api/import', {path: p});
+    alert('导入完成:' + JSON.stringify(r)); }
+  catch(err){ alert(err.message); }
+}
+$('#autonomy-sel').onchange = async e => {
+  try{ await api('/api/autonomy', {level: parseInt(e.target.value, 10)}); }
+  catch(err){ alert(err.message); }
+};
+
+/* ============ 启动 ============ */
+$('#clear-stream').onclick = () => { $('#stream').innerHTML = ''; };
+buildFilterChips();
+applyLang();
+(async function init(){
+  try{
+    const log = await api('/api/log?count=150');
+    log.events.forEach(ev => { if (ev.type !== 'chat_stream') renderEvent(ev, $('#stream')); });
+    const st = $('#stream'); st.scrollTop = st.scrollHeight;
+  }catch(e){}
+  loadState();
+  const es = new EventSource('/api/events');
+  es.onmessage = e => { try{ onEvent(JSON.parse(e.data)); }catch(err){} };
+  setInterval(loadState, 15000);
+})();
+</script>
+</body>
+</html>
