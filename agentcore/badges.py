@@ -41,10 +41,15 @@ def collect(app):
         app["usage"].snapshot().get("month"),
         (app["cfg"].get("wallet") or {}).get("prices") or {})
     mem = app["memory"].overview()
+    try:
+        stability = app["uptime"].snapshot()
+    except Exception:
+        stability = {}
     return {"days": int(days), "runs": total_runs, "rate": rate,
             "facts": mem.get("facts", 0), "knowledge": mem.get("knowledge", 0),
             "spent": round(spent, 2), "beats": hb.beats,
-            "eval_score": app["evals"].last_score()}
+            "eval_score": app["evals"].last_score(),
+            "stability": stability}
 
 
 def render(d):
@@ -60,6 +65,18 @@ def render(d):
                            "#0969da"),
         "cost.svg": _badge("本月花费", "¥%.2f" % d["spent"], "#cf222e"),
     }
+    up = d.get("stability") or {}
+    crashes = up.get("crashes", 0)
+    if crashes:
+        stab_val = "宕机 %d 次" % crashes
+        stab_color = "#cf222e"
+    elif up.get("starts"):
+        stab_val = "无宕机 · 启动 %d 次" % up.get("starts", 0)
+        stab_color = "#2da44e"
+    else:
+        stab_val = "未记录"
+        stab_color = "#8b949e"
+    out["stability.svg"] = _badge("稳定性", stab_val, stab_color)
     out["summary.json"] = _json.dumps(d, ensure_ascii=False, indent=1)
     return out
 

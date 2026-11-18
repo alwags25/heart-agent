@@ -11,6 +11,7 @@
 ![长期记忆](docs/badges/memory.svg)
 ![回归健康分](docs/badges/eval.svg)
 ![本月花费](docs/badges/cost.svg)
+![稳定性](docs/badges/stability.svg)
 
 <video src="docs/demo.webm" controls muted width="720"></video>
 *▲ 27 秒实机演示:对话 → 工具调用 → 真实模型回复 → 记忆图谱 → 评估台*

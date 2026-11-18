@@ -4,6 +4,7 @@
 新增装配:目标系统、技能日志、好奇心、提示词进化、混合路由、同伴智能体(A2A)、
 外部收件箱(邮件/Telegram)。配置热重载覆盖所有新模块。"""
 import argparse
+import atexit
 import json
 import logging
 import os
@@ -41,6 +42,7 @@ from agentcore.llm import OllamaEmbedder, ProxyLLM, make_llm, model_label
 from agentcore.memory import MemoryStore
 from agentcore.server import start_server
 from agentcore.skills import SkillsLog
+from agentcore.uptime import UptimeTracker
 from agentcore.tasks import TaskManager
 from agentcore.usage import UsageTracker
 
@@ -262,8 +264,10 @@ def build_app(config_path):
     tasks.set_brain(brain)
     goals.set_brain(brain)
 
+    uptime = UptimeTracker(data_dir, bus)
     app = {
         "bus": bus, "memory": memory, "assistant": assistant, "extensions": extensions,
+        "uptime": uptime,
         "tasks": tasks, "brain": brain, "usage": usage, "cfg": cfg, "cfg_path": config_path,
         "main_llm": main_proxy, "assist_llm": assist_proxy, "router": router,
         "goals": goals, "skills": skills, "evolver": evolver, "peers": peers,
@@ -281,10 +285,12 @@ def build_app(config_path):
         curiosity=cfg.get("curiosity"), skill_harvest=cfg.get("skill_harvest"),
         evals=evals, usage=usage, cfg_getter=lambda: app["cfg"],
         on_config_reload=lambda: reload_config(app),
+        on_daily_report=lambda: refresh_badges(app),
         state_path=os.path.join(data_dir, "heartbeat_state.json"))
     heartbeat.set_evolve_cfg(cfg.get("prompt_evolution"))
     app["heartbeat"] = heartbeat
     app["save_config"] = lambda: persist_config(app)
+    app["refresh_badges"] = lambda: refresh_badges(app)
     app["events_sink"] = os.path.join(data_dir, "events_log.jsonl")
     bus.set_sink(app["events_sink"])
     inbox = InboxManager(brain, bus, lambda: app["cfg"].get("inbox") or {})
@@ -293,6 +299,32 @@ def build_app(config_path):
                            "assist": model_label(cfg.get("assist_model"), "ASSIST")}
     _announce_models(app)
     return app
+
+
+_BADGE_FILES = {"uptime.svg", "tasks.svg", "memory.svg", "eval.svg", "cost.svg",
+                "stability.svg", "summary.json"}
+
+
+def refresh_badges(app):
+    """把运行数据渲染并写入 docs/badges/(启动 / 心跳日报 / POST /api/badges 触发)。"""
+    from agentcore import badges
+    try:
+        out = badges.render(badges.collect(app))
+    except Exception as e:
+        log.warning("徽章生成失败: %s", e)
+        return False
+    target = os.path.join(app["base_dir"], "docs", "badges")
+    try:
+        os.makedirs(target, exist_ok=True)
+        for name, content in out.items():
+            if name not in _BADGE_FILES:
+                continue  # 白名单,防路径穿越
+            with open(os.path.join(target, name), "w", encoding="utf-8") as f:
+                f.write(content)
+        return True
+    except OSError as e:
+        log.warning("徽章写盘失败: %s", e)
+        return False
 
 
 def _announce_models(app):
@@ -417,6 +449,10 @@ def run_cli(app):
         stop.set()
         app["heartbeat"].stop()
         app["inbox"].stop()
+        try:
+            app["uptime"].record_stop(0)
+        except Exception:
+            pass
         print("再见")
 
 
@@ -443,6 +479,10 @@ def run_web(app, port, open_browser):
     except KeyboardInterrupt:
         app["heartbeat"].stop()
         app["inbox"].stop()
+        try:
+            app["uptime"].record_stop(0)
+        except Exception:
+            pass
         print("\n已停止")
 
 
@@ -475,6 +515,11 @@ def main():
 
     app = build_app(args.config)
     setup_logging(app["data_dir"])
+    from agentcore import crash as _crash
+    _crash.install(os.path.join(app["data_dir"], "crash.log"), app["bus"])
+    app["uptime"].record_start()                       # 记录启动;并检测上次是否宕机
+    atexit.register(lambda: app["uptime"].record_stop(0))
+    refresh_badges(app)                                # 启动即刷新一次徽章
     if args.heartbeat:
         app["heartbeat"].interval = max(5, args.heartbeat)
     if args.idle:

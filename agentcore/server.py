@@ -111,7 +111,7 @@ def make_handler(app):
                 if path.startswith("/api/badges/"):
                     name = path.rsplit("/", 1)[-1]
                     from agentcore import badges as _badges
-                    allowed = {"uptime", "tasks", "memory", "eval", "cost"}
+                    allowed = {"uptime", "tasks", "memory", "eval", "cost", "stability"}
                     if name == "summary.json":
                         return self._json(_badges.collect(app))
                     if name.replace(".svg", "") in allowed and name.endswith(".svg"):
@@ -361,6 +361,9 @@ def make_handler(app):
                         return self._json({"ok": False, "error": "text 为空"}, 400)
                     threading.Thread(target=_speak, args=(text,), daemon=True).start()
                     return self._json({"ok": True})
+                if path == "/api/badges":
+                    ok = app.get("refresh_badges", lambda: False)()
+                    return self._json({"ok": bool(ok)})
 
                 # ---- A2A 同伴委托(同步返回,供其他 HeartAgent 实例调用) ----
                 if path == "/api/a2a":

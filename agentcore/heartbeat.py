@@ -48,11 +48,11 @@ class Heartbeat:
         self._evolve_cfg = {}
         self.on_config_reload = on_config_reload
         self.state_path = state_path
-        self.beats = 0
-        self.last_beat = "-"
         self.organized_up_to = memory.chat_len()
         self._cfg_mtime = self._mtime()
         self.state = self._load_state()
+        self.beats = int(self.state.get("beats", 0) or 0)   # 重启后从状态文件续上
+        self.last_beat = self.state.get("last_beat") or "-"
         self._stop = None
         self._thread = None
 
@@ -60,7 +60,7 @@ class Heartbeat:
     def _mtime(self):
         try:
             return os.path.getmtime(self.config_path)
-        except OSError:
+        except (OSError, TypeError):
             return None
 
     def _load_state(self):
@@ -144,6 +144,10 @@ class Heartbeat:
     def _tick(self):
         self.beats += 1
         self.last_beat = time.strftime("%H:%M:%S")
+        self.state["beats"] = self.beats
+        self.state["last_beat"] = self.last_beat
+        if self.beats % 6 == 0:
+            self._save_state()  # 每 6 次心跳落盘一次,重启可续(避免频繁写盘)
         idle_for = time.time() - self.brain.last_activity
         self.events.publish("status", beats=self.beats, last_beat=self.last_beat,
                             idle_for=round(idle_for))
